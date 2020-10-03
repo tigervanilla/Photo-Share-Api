@@ -1,0 +1,6 @@
+{
+    "dbUrl": "mongodb://localhost:27017/photo-share-api",
+    "githubAuthUrl": "https://github.com/login/oauth/authorize?client_id=<YOUR-CLIENT-ID>&scope=user",
+    "client_id": "<YOUR-CLIENT-ID>",
+    "client_secret": "<YOUR-CLIENT-SECRET>"
+}
