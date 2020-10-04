@@ -1,8 +1,9 @@
 const { authorizeWithGithub, createFakeUsers } = require('../lib')
 const { client_id, client_secret } = require('../config.json')
+const { newUser } = require('./Subscription')
 
 module.exports = {
-  async postPhoto(parent, args, {db, currentUser}) {
+  async postPhoto(parent, args, {db, currentUser, pubsub}) {
     if (!currentUser) {
       throw new Error('Only an authorized user can post a photo')
     }
@@ -13,10 +14,11 @@ module.exports = {
     }
     const { insertedId } = await db.collection('photos').insertOne(newPhoto)
     newPhoto.id = insertedId
+    pubsub.publish('photo-added', { newPhoto })
     return newPhoto
   },
 
-  async githubAuth(parent, {code}, {db}) {
+  async githubAuth(parent, {code}, {db, pubsub}) {
     try {
       // 1. Obtain data from GitHub
       const {
@@ -48,11 +50,14 @@ module.exports = {
         upsert: true
       })
       const {
-        ops: [user]
+        ops: [user],
+        result,
       } = replaceOneResult
-      // console.log('replaceOneResult::', replaceOneResult)
-      // console.log('ops::', ops)
-      // 5. Return user data and their token
+      // 5. Publish if a new user is added
+      if (result.upserted) {
+        pubsub.publish('user-added', {newUser: user})
+      }
+      // 6. Return user data and their token
       return {
         user,
         token: access_token
@@ -62,8 +67,9 @@ module.exports = {
     }
   },
 
-  addFakeUsers: async (parent, {count}, {db}) => {
+  addFakeUsers: async (parent, {count}, {db, pubsub}) => {
     const { results } = await createFakeUsers(count)
+    console.log(results)
     const users = results.map(r => ({
       githubLogin: r.login.username,
       name: `${r.name.first} ${r.name.last}`,
@@ -71,6 +77,9 @@ module.exports = {
       githubToken: r.login.sha1,
     }))
     await db.collection('users').insertMany(users)
+    // Publish to newUser subscription
+    const newUsers = await db.collection('users').find().sort({_id: -1}).limit(count).toArray()
+    newUsers.forEach(nu => pubsub.publish('user-added', {newUser: nu}))
     return users
   },
 

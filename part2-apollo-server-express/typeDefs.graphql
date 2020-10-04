@@ -39,6 +39,11 @@ type Mutation {
   fakeUserAuth(githubLogin: ID!): AuthPayload!
 }
 
+type Subscription {
+  newPhoto: Photo!
+  newUser: User!
+}
+
 enum PhotoCategory {
   SELFIE
   PORTRAIT

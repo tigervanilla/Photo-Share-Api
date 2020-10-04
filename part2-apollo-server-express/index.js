@@ -2,8 +2,9 @@
 const express = require('express')
 const expressPlayground = require('graphql-playground-middleware-express').default
 const { MongoClient } = require('mongodb')
-const { ApolloServer } = require('apollo-server-express')
+const { ApolloServer, PubSub } = require('apollo-server-express')
 const { readFileSync } = require('fs')
+const { createServer } = require('http')
 const { join } = require('path')
 const { dbUrl } = require('./config.json');
 
@@ -16,13 +17,14 @@ async function start() {
     const app = express()
     const dbClient = await MongoClient.connect(dbUrl, {useNewUrlParser: true, useUnifiedTopology: true})
     const db = dbClient.db()
+    const pubsub = new PubSub()
     const server = new ApolloServer({
         typeDefs,
         resolvers,
-        context: async ({req}) => {
-            const githubToken = req.headers.authorization
+        context: async ({req, connection}) => {
+            const githubToken = req ? req.headers.authorization : connection.context.Authorization
             const currentUser = await db.collection('users').findOne({githubToken})
-            return { db, currentUser }
+            return { db, currentUser, pubsub }
         },
     })
     // 3. Call `applyMiddleware()` to allow middleware mounted on the same path
@@ -30,9 +32,12 @@ async function start() {
     // 4. Create a home route ('/'), a GraphQL endpoint ('/graphql'), a playground route ('/playground)
     app.get('/', (req, res) => res.end('Welcome to the PhotoShare API'))
     app.get('/playground', expressPlayground({endpoint: '/graphql'}))
-    
+    // 5. Create an HttpServer using the express app instance
+    const httpServer = createServer(app)
+    // 6. Enable subscription support at ws://localhost:<PORT>/graphql
+    server.installSubscriptionHandlers(httpServer)
     // 5. Listen on a specific port
-    app.listen(4000, ()=>console.log(`GraphQL Server running @ http://localhost:4000${server.graphqlPath}`))
+    httpServer.listen(4000, ()=>console.log(`GraphQL Server running @ http://localhost:4000${server.graphqlPath}`))
 }
 
 start()
