@@ -1,8 +1,10 @@
 // 1. Require `apollo-server-express` and `express`
 const express = require('express')
 const expressPlayground = require('graphql-playground-middleware-express').default
+const depthLimit = require('graphql-depth-limit')
 const { MongoClient } = require('mongodb')
 const { ApolloServer, PubSub } = require('apollo-server-express')
+const { createComplexityLimitRule } = require('graphql-validation-complexity')
 const { readFileSync } = require('fs')
 const { createServer } = require('http')
 const { join } = require('path')
@@ -15,12 +17,17 @@ let i=0;
 async function start() {
     // 2. Call express() to create an Express application
     const app = express()
+    app.use('/img/photos', express.static(join(__dirname, 'assets', 'photos')))
     const dbClient = await MongoClient.connect(dbUrl, {useNewUrlParser: true, useUnifiedTopology: true})
     const db = dbClient.db()
     const pubsub = new PubSub()
     const server = new ApolloServer({
         typeDefs,
         resolvers,
+        validationRules: [
+            depthLimit(5),
+            createComplexityLimitRule(1000, { onCost: cost => console.log(`Query Cost = ${cost}`) }),
+        ],
         context: async ({req, connection}) => {
             const githubToken = req ? req.headers.authorization : connection.context.Authorization
             const currentUser = await db.collection('users').findOne({githubToken})
@@ -36,7 +43,8 @@ async function start() {
     const httpServer = createServer(app)
     // 6. Enable subscription support at ws://localhost:<PORT>/graphql
     server.installSubscriptionHandlers(httpServer)
-    // 5. Listen on a specific port
+    httpServer.timeout = 5000;
+    // 6. Listen on a specific port
     httpServer.listen(4000, ()=>console.log(`GraphQL Server running @ http://localhost:4000${server.graphqlPath}`))
 }
 

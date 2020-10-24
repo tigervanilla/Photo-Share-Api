@@ -1,6 +1,7 @@
-const { authorizeWithGithub, createFakeUsers } = require('../lib')
+const { authorizeWithGithub, createFakeUsers, uploadStream } = require('../lib')
 const { client_id, client_secret } = require('../config.json')
 const { newUser } = require('./Subscription')
+const path = require('path')
 
 module.exports = {
   async postPhoto(parent, args, {db, currentUser, pubsub}) {
@@ -12,10 +13,18 @@ module.exports = {
       userID: currentUser.githubLogin,
       created: new Date(),
     }
-    const { insertedId } = await db.collection('photos').insertOne(newPhoto)
-    newPhoto.id = insertedId
-    pubsub.publish('photo-added', { newPhoto })
-    return newPhoto
+    try {
+      const { insertedId } = await db.collection('photos').insertOne(newPhoto)
+      newPhoto.id = insertedId
+      const toPath = path.join(__dirname, '..', 'assets', 'photos', `${newPhoto.id}.jpg`)
+      const file = await args.input.file
+      const stream = file.createReadStream();
+      const result = await uploadStream(stream, toPath)
+      pubsub.publish('photo-added', { newPhoto })
+      return newPhoto
+    } catch (error) {
+      throw new Error(error);
+    }
   },
 
   async githubAuth(parent, {code}, {db, pubsub}) {

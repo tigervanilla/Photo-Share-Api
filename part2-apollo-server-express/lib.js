@@ -1,4 +1,5 @@
 const fetch = require('node-fetch')
+const fs = require('fs');
 
 const requestGithubToken = async (credentials) => {
   try {
@@ -39,7 +40,24 @@ const createFakeUsers = async (count=1) => {
   return response.json()
 }
 
+const uploadStream = async (stream, path) => {
+  console.log('PATH::', path)
+  const promise = new Promise((resolve, reject) => {
+    stream
+    .on('error', error => {
+      if (stream.truncated) {
+        fs.unlinkSync(path)
+      }
+      reject(error)
+    })
+    .on('end', resolve)
+    .pipe(fs.createWriteStream(path))
+  });
+  return promise;
+}
+
 module.exports = {
   authorizeWithGithub,
   createFakeUsers,
+  uploadStream,
 }
